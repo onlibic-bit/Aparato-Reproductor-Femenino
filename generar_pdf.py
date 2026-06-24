@@ -1,0 +1,739 @@
+# -*- coding: utf-8 -*-
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.units import cm
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+    PageBreak, KeepTogether, ListFlowable, ListItem, HRFlowable
+)
+from reportlab.pdfgen import canvas as canvas_mod
+
+# ---------------------------------------------------------------
+# PALETA ROSA
+# ---------------------------------------------------------------
+ROSA_FUERTE   = colors.HexColor("#AD1457")
+ROSA_MEDIO    = colors.HexColor("#D81B60")
+ROSA_SUAVE    = colors.HexColor("#EC407A")
+ROSA_CLARO_BG = colors.HexColor("#FCE4EC")
+ROSA_PALIDO   = colors.HexColor("#FFF5F8")
+EXTRA_BORDE   = colors.HexColor("#F48FB1")
+EXTRA_BG      = colors.HexColor("#FFE3ED")
+TEXTO_OSCURO  = colors.HexColor("#4A1430")
+BLANCO        = colors.white
+GRIS_TEXTO    = colors.HexColor("#6B4156")
+
+PAGE_W, PAGE_H = letter
+
+# ---------------------------------------------------------------
+# ESTILOS
+# ---------------------------------------------------------------
+styles = getSampleStyleSheet()
+
+def style(name, **kw):
+    base = dict(fontName="Helvetica", textColor=TEXTO_OSCURO, leading=13)
+    base.update(kw)
+    return ParagraphStyle(name, **base)
+
+
+S_TITLE = style("S_TITLE", fontName="Helvetica-Bold", fontSize=22,
+                textColor=BLANCO, alignment=TA_CENTER, leading=26)
+S_SUBTITLE = style("S_SUBTITLE", fontName="Helvetica-Oblique", fontSize=12,
+                    textColor=colors.HexColor("#FCE4EC"), alignment=TA_CENTER, leading=14)
+
+S_SECTION = style("S_SECTION", fontName="Helvetica-Bold", fontSize=13,
+                   textColor=BLANCO, leading=16)
+
+S_SUBSECTION = style("S_SUBSECTION", fontName="Helvetica-Bold", fontSize=10.5,
+                      textColor=ROSA_FUERTE, leading=13, spaceBefore=2, spaceAfter=2)
+
+S_BODY = style("S_BODY", fontSize=9.3, leading=12.4, spaceAfter=3, alignment=TA_LEFT)
+
+S_BULLET = style("S_BULLET", fontSize=9.3, leading=12.4, spaceAfter=2,
+                  leftIndent=10, bulletIndent=0)
+
+S_BULLET2 = style("S_BULLET2", fontSize=9.0, leading=11.8, spaceAfter=2,
+                   leftIndent=22, textColor=GRIS_TEXTO)
+
+S_KEYTERM = style("S_KEYTERM", fontName="Helvetica-Bold", fontSize=9.3,
+                   leading=12.4, textColor=ROSA_MEDIO)
+
+S_EXTRA_LABEL = style("S_EXTRA_LABEL", fontName="Helvetica-Bold", fontSize=9.5,
+                       textColor=ROSA_FUERTE, leading=12)
+S_EXTRA_BODY = style("S_EXTRA_BODY", fontSize=9.0, leading=12.2, textColor=TEXTO_OSCURO)
+
+S_TABLE_HEAD = style("S_TABLE_HEAD", fontName="Helvetica-Bold", fontSize=9,
+                      textColor=BLANCO, alignment=TA_CENTER, leading=11)
+S_TABLE_CELL = style("S_TABLE_CELL", fontSize=8.7, textColor=TEXTO_OSCURO,
+                      alignment=TA_CENTER, leading=11)
+S_TABLE_CELL_L = style("S_TABLE_CELL_L", fontSize=8.7, textColor=TEXTO_OSCURO,
+                        alignment=TA_LEFT, leading=11)
+
+
+# ---------------------------------------------------------------
+# HELPERS
+# ---------------------------------------------------------------
+
+def section_header(text, icon="\u2665"):
+    """Barra rosa fuerte de ancho completo para titulos de seccion."""
+    p = Paragraph(f"{icon}&nbsp;&nbsp;{text}", S_SECTION)
+    t = Table([[p]], colWidths=[17.0*cm])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,-1), ROSA_FUERTE),
+        ("LEFTPADDING", (0,0), (-1,-1), 10),
+        ("RIGHTPADDING", (0,0), (-1,-1), 10),
+        ("TOPPADDING", (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+        ("ROUNDEDCORNERS", [4,4,4,4]),
+    ]))
+    return t
+
+def subsection_header(text):
+    p = Paragraph(text, S_TABLE_HEAD)
+    t = Table([[p]], colWidths=[17.0*cm])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,-1), ROSA_SUAVE),
+        ("LEFTPADDING", (0,0), (-1,-1), 8),
+        ("RIGHTPADDING", (0,0), (-1,-1), 8),
+        ("TOPPADDING", (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("ALIGN", (0,0), (-1,-1), "LEFT"),
+    ]))
+    return t
+
+def bullets(items, level=1):
+    flows = []
+    for it in items:
+        s = S_BULLET if level == 1 else S_BULLET2
+        mark = "\u2022" if level == 1 else "\u2013"
+        flows.append(Paragraph(f"{mark}&nbsp; {it}", s))
+    return flows
+
+def extra_box(title_text, body_items):
+    """Caja EXTRA en color rosita claro, con borde rosa."""
+    inner = [Paragraph(f"\u2728 EXTRA! &mdash; {title_text}", S_EXTRA_LABEL), Spacer(1,3)]
+    if isinstance(body_items, str):
+        body_items = [body_items]
+    for b in body_items:
+        inner.append(Paragraph(f"\u2022&nbsp; {b}", S_EXTRA_BODY))
+    t = Table([[inner]], colWidths=[16.6*cm])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,-1), EXTRA_BG),
+        ("BOX", (0,0), (-1,-1), 1.1, EXTRA_BORDE),
+        ("LEFTPADDING", (0,0), (-1,-1), 10),
+        ("RIGHTPADDING", (0,0), (-1,-1), 10),
+        ("TOPPADDING", (0,0), (-1,-1), 7),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+    ]))
+    return t
+
+def spacer(h=6):
+    return Spacer(1, h)
+
+def hr():
+    return HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#F8BBD0"),
+                       spaceBefore=6, spaceAfter=6)
+
+
+# ---------------------------------------------------------------
+# PORTADA / ENCABEZADO Y PIE (canvas)
+# ---------------------------------------------------------------
+
+def header_footer(c: canvas_mod.Canvas, doc):
+    c.saveState()
+    c.setFillColor(ROSA_FUERTE)
+    c.rect(0, PAGE_H - 1.0*cm, PAGE_W, 1.0*cm, stroke=0, fill=1)
+    c.setFillColor(BLANCO)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(1.6*cm, PAGE_H - 0.7*cm, "Aparato Reproductor Femenino")
+    c.setFont("Helvetica", 8)
+    c.drawRightString(PAGE_W - 1.6*cm, PAGE_H - 0.7*cm, "Apuntes de estudio")
+    c.setFillColor(ROSA_SUAVE)
+    c.rect(0, 0, PAGE_W, 0.6*cm, stroke=0, fill=1)
+    c.setFillColor(BLANCO)
+    c.setFont("Helvetica", 7.5)
+    c.drawCentredString(PAGE_W/2, 0.2*cm, f"Pagina {doc.page}")
+    c.restoreState()
+
+# ---------------------------------------------------------------
+# CONTENIDO
+# ---------------------------------------------------------------
+story = []
+
+# ---- PORTADA ----
+cover = Table([[Paragraph("APARATO REPRODUCTOR FEMENINO", S_TITLE)],
+               [Spacer(1,6)],
+               [Paragraph("Desarrollo embrionario \u00b7 Anatomia \u00b7 Ciclo ovarico \u00b7 Embarazo y parto", S_SUBTITLE)]],
+              colWidths=[17.0*cm])
+cover.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,-1), ROSA_FUERTE),
+    ("TOPPADDING", (0,0), (-1,-1), 22),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 22),
+    ("LEFTPADDING", (0,0), (-1,-1), 14),
+    ("RIGHTPADDING", (0,0), (-1,-1), 14),
+]))
+story.append(cover)
+story.append(spacer(14))
+
+legend = Table([[
+    Paragraph('<font color="#AD1457"><b>\u25A0</b></font>&nbsp; Apunte original &nbsp;&nbsp;&nbsp; '
+              '<font color="#F48FB1"><b>\u25A0</b></font>&nbsp; Caja EXTRA! (informacion anadida por Claude)',
+              S_BODY)
+]], colWidths=[17.0*cm])
+legend.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,-1), ROSA_PALIDO),
+    ("BOX", (0,0), (-1,-1), 0.7, colors.HexColor("#F8BBD0")),
+    ("LEFTPADDING", (0,0), (-1,-1), 8),
+    ("TOPPADDING", (0,0), (-1,-1), 5),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+]))
+story.append(legend)
+story.append(spacer(10))
+
+
+# =================================================================
+# 1. DESARROLLO EMBRIONARIO DE LOS GENITALES
+# =================================================================
+story.append(section_header("1. Desarrollo embrionario de los genitales"))
+story.append(spacer(6))
+
+story.append(Paragraph("Etapa indiferenciada", S_SUBSECTION))
+story.extend(bullets([
+    "Etapa diferenciada hacia la semana 4-6 de gestacion.",
+    "Todos los embriones <b>XX</b> y <b>XY</b> tienen, al inicio, las mismas estructuras.",
+    "Gonadas indiferenciadas: aun no hay diferenciacion sexual visible.",
+]))
+story.append(spacer(4))
+
+story.append(Paragraph("Diferenciacion femenina (aprox. semana 7-8)", S_SUBSECTION))
+story.extend(bullets([
+    "Ocurre <b>en ausencia de</b>: gen <b>SRY</b>, testosterona y hormona antimulleriana (AMH).",
+    "La corteza gonadal se desarrolla.",
+    "Las celulas germinales forman <b>ovogonias</b>.",
+    "Se forman los <b>foliculos primordiales</b>.",
+]))
+story.append(spacer(3))
+story.append(Paragraph("Origen embrionario de los genitales externos:", S_BODY))
+t_origen = Table([
+    [Paragraph("Estructura embrionaria", S_TABLE_HEAD), Paragraph("Da origen a", S_TABLE_HEAD)],
+    [Paragraph("Tuberculo genital", S_TABLE_CELL_L), Paragraph("Clitoris", S_TABLE_CELL_L)],
+    [Paragraph("Pliegues uretrales", S_TABLE_CELL_L), Paragraph("Labios menores", S_TABLE_CELL_L)],
+    [Paragraph("Prominencias genitales", S_TABLE_CELL_L), Paragraph("Labios mayores", S_TABLE_CELL_L)],
+], colWidths=[8.5*cm, 8.5*cm])
+t_origen.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), ROSA_MEDIO),
+    ("BACKGROUND", (0,1), (-1,-1), ROSA_CLARO_BG),
+    ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#F8BBD0")),
+    ("TOPPADDING", (0,0), (-1,-1), 4),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+]))
+story.append(t_origen)
+story.append(spacer(8))
+
+
+# =================================================================
+# 2. ANATOMIA DEL APARATO REPRODUCTOR FEMENINO
+# =================================================================
+story.append(section_header("2. Anatomia del aparato reproductor"))
+story.append(spacer(6))
+
+story.append(subsection_header("Genitales externos (vulva)"))
+story.append(spacer(4))
+story.extend(bullets([
+    "Monte de Venus", "Labios mayores", "Clitoris", "Labios menores",
+    "Introito vaginal &mdash; en su entrada se localiza el <b>himen</b>",
+]))
+story.append(extra_box("Himen imperforado", [
+    "Es la condicion en la que el himen no presenta apertura, por lo que obstruye por completo la salida vaginal.",
+    "Suele detectarse en la pubertad por dolor pelvico ciclico sin salida de flujo menstrual (hematocolpos); su manejo es quirurgico (himenotomia)."
+]))
+story.append(spacer(8))
+
+story.append(subsection_header("Genitales internos"))
+story.append(spacer(4))
+
+story.append(Paragraph("Canal vaginal", S_KEYTERM))
+story.extend(bullets([
+    "\u201cVagina\u201d significa <i>envoltura</i>. Es un conducto fibromuscular que conecta el utero con el exterior.",
+    "Permite la salida del flujo menstrual y el acto sexual, con el paso del semen.",
+]))
+
+story.append(Paragraph("Glandulas parauretrales de Skene", S_KEYTERM))
+story.extend(bullets([
+    "Homologas a la prostata masculina.",
+    "Su secrecion contiene creatinina, fosfatasa acida prostatica, antigeno prostatico especifico, glucosa y fructosa.",
+    "Esta composicion sugiere que ayudan a la nutricion de los espermatozoides, facilitando la fecundacion.",
+]))
+
+story.append(Paragraph("Glandulas de Bartholin", S_KEYTERM))
+story.extend(bullets([
+    "Dos glandulas ubicadas a cada lado de la apertura vaginal, con conducto propio.",
+    "Funcion: liberar liquido lubricante durante el acto sexual.",
+]))
+
+story.append(Paragraph("Cervix y utero", S_KEYTERM))
+story.extend(bullets([
+    "El utero (matriz) es un organo hueco, muscular y piriforme que contiene al producto de la fecundacion durante su desarrollo.",
+    "Se divide en: <b>cervix</b>, <b>cuerpo</b> e <b>istmo</b> (fondo).",
+    "Capas: <b>endometrio</b>, <b>miometrio</b> y <b>perimetrio</b>.",
+]))
+
+story.append(Paragraph("Trompas de Falopio", S_KEYTERM))
+story.extend(bullets([
+    "Conductos que llevan al ovulo/cigoto hacia la cavidad uterina.",
+    "Se dividen en: <b>fimbrias</b>, <b>infundibulo</b>, <b>ampolla</b> (sitio de fecundacion), <b>istmo</b> y region <b>intramural</b>.",
+    "Contienen epitelio ciliado.",
+]))
+
+story.append(Paragraph("Ovarios", S_KEYTERM))
+story.extend(bullets([
+    "Gonadas femeninas: en ellos se forman los foliculos con sus respectivos ovocitos y las hormonas sexuales femeninas.",
+]))
+
+story.append(PageBreak())
+
+
+# =================================================================
+# 3. CICLO OVARICO
+# =================================================================
+story.append(section_header("3. Ciclo ovarico"))
+story.append(spacer(6))
+
+story.extend(bullets([
+    "La hormona <b>FSH</b> inicia la formacion de los foliculos en el ovario.",
+    "Toda mujer tiene foliculos en estado latente: <b>foliculos primordiales</b>, formados por una celula central "
+    "(ovocito primario) detenido en <b>profase I</b>, etapa <b>dictioteno</b>, rodeada de celulas foliculares planas.",
+    "La mujer <b>nace sin ovogonias</b>, porque todas iniciaron la meiosis.",
+    "Llega a la pubertad con ~<b>400,000</b> foliculos primordiales; en cada ciclo se reclutan unos <b>14</b> para continuar su maduracion.",
+    "Normalmente solo <b>uno</b> logra madurar por completo; el resto sufre <b>atresia</b> (muerte).",
+]))
+story.append(spacer(4))
+
+story.append(Paragraph("Progresion folicular", S_SUBSECTION))
+prog = Table([
+    [Paragraph("Foliculo primario", S_TABLE_HEAD), Paragraph("Foliculo secundario", S_TABLE_HEAD), Paragraph("Foliculo terciario (De Graaf)", S_TABLE_HEAD)],
+    [Paragraph("Celulas foliculares crecen por FSH y producen estrogenos, que estimulan el crecimiento del endometrio.", S_TABLE_CELL_L),
+     Paragraph("Las celulas foliculares forman una cavidad llena de estrogenos: el <b>antro folicular</b>.", S_TABLE_CELL_L),
+     Paragraph("Crece el antro y aparece el <b>cumulus oophorus</b> (pediculo que fija la corona radiada).", S_TABLE_CELL_L)],
+], colWidths=[5.7*cm, 5.7*cm, 5.7*cm])
+prog.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), ROSA_MEDIO),
+    ("BACKGROUND", (0,1), (-1,-1), ROSA_CLARO_BG),
+    ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#F8BBD0")),
+    ("TOPPADDING", (0,0), (-1,-1), 5),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+]))
+story.append(prog)
+story.append(spacer(6))
+
+story.extend(bullets([
+    "Mientras tanto, el ovocito primario termina su <b>meiosis I</b>: genera el <b>primer cuerpo polar</b> y un "
+    "<b>ovocito secundario</b>. Ambas celulas continuan en meiosis II hasta <b>metafase II</b>.",
+]))
+story.append(spacer(3))
+
+
+story.append(Paragraph("Capas del foliculo de Graaf", S_SUBSECTION))
+capas = Table([
+    [Paragraph("Capa", S_TABLE_HEAD), Paragraph("Caracteristica", S_TABLE_HEAD)],
+    [Paragraph("Celulas de la granulosa", S_TABLE_CELL_L), Paragraph("Celulas cubicas que envuelven el antro.", S_TABLE_CELL_L)],
+    [Paragraph("Teca interna", S_TABLE_CELL_L), Paragraph("Celulas cubicas formadoras de estrogenos.", S_TABLE_CELL_L)],
+    [Paragraph("Teca externa", S_TABLE_CELL_L), Paragraph("Celulas planas; forma los vasos sanguineos que irrigan las dos capas internas.", S_TABLE_CELL_L)],
+], colWidths=[5.5*cm, 11.5*cm])
+capas.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), ROSA_MEDIO),
+    ("BACKGROUND", (0,1), (-1,-1), ROSA_CLARO_BG),
+    ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#F8BBD0")),
+    ("TOPPADDING", (0,0), (-1,-1), 4),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+]))
+story.append(capas)
+story.append(spacer(6))
+
+story.append(Paragraph("Ovulacion", S_SUBSECTION))
+story.extend(bullets([
+    "Antes de la ovulacion, la ovocelula (con el primer cuerpo polar, zona pelucida y corona radiada) se separa del "
+    "cumulus oophorus y flota libre en la cavidad antral.",
+    "La <b>LH</b> estimula la formacion de prostaglandinas en el ovario, lo que aumenta la presion del foliculo hasta "
+    "que este se rompe, liberando su contenido a la cavidad peritoneal.",
+    "Previamente, la trompa de Falopio ipsilateral ya se habia acercado al ovario en proceso de ovulacion.",
+]))
+
+story.append(Paragraph("Fase lutea", S_SUBSECTION))
+story.extend(bullets([
+    "Tras la ovulacion, las celulas de la granulosa y de la teca que quedan en el ovario son transformadas por la "
+    "LH en <b>celulas luteas</b> (color amarillo) &rarr; forman el <b>cuerpo luteo</b>, que produce <b>progesterona</b>.",
+    "La progesterona prepara el endometrio para la implantacion y aumenta ligeramente la temperatura basal.",
+    "Tambien inhibe la liberacion hipofisaria de LH, por lo que esta hormona disminuye en sangre.",
+    "Sin LH, el cuerpo luteo muere y se convierte en <b>cuerpo albicans</b> (vestigio cicatricial).",
+    "Desde que aparece la progesterona hasta que muere el cuerpo luteo pasan <b>14 dias</b>; al morir, cesa la produccion de progesterona.",
+]))
+story.append(spacer(6))
+
+
+story.append(Paragraph("Resumen del ciclo (dia 1 a 28)", S_SUBSECTION))
+resumen = Table([
+    [Paragraph("Base", S_TABLE_HEAD), Paragraph("Dia 1 a 14", S_TABLE_HEAD), Paragraph("Dia 14 a 28", S_TABLE_HEAD)],
+    [Paragraph("Ovario", S_TABLE_CELL_L), Paragraph("Fase folicular", S_TABLE_CELL), Paragraph("Fase lutea", S_TABLE_CELL)],
+    [Paragraph("Hormonas", S_TABLE_CELL_L), Paragraph("Fase estrogenica", S_TABLE_CELL), Paragraph("Fase progestagena", S_TABLE_CELL)],
+    [Paragraph("Endometrio", S_TABLE_CELL_L), Paragraph("Fase proliferativa", S_TABLE_CELL), Paragraph("Fase secretora", S_TABLE_CELL)],
+], colWidths=[4.5*cm, 6.25*cm, 6.25*cm])
+resumen.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), ROSA_FUERTE),
+    ("BACKGROUND", (0,1), (0,-1), ROSA_SUAVE),
+    ("TEXTCOLOR", (0,1), (0,-1), colors.white),
+    ("FONTNAME", (0,1), (0,-1), "Helvetica-Bold"),
+    ("BACKGROUND", (1,1), (-1,-1), ROSA_CLARO_BG),
+    ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#F8BBD0")),
+    ("TOPPADDING", (0,0), (-1,-1), 5),
+    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+]))
+story.append(resumen)
+
+story.append(PageBreak())
+
+# =================================================================
+# 4. FECUNDACION
+# =================================================================
+story.append(section_header("4. Fecundacion"))
+story.append(spacer(6))
+
+story.extend(bullets([
+    "Los espermatozoides sufren su <b>capacitacion</b> en la vagina y avanzan dividiendose en busca del ovocito II.",
+    "Algunos espermatozoides ayudan a que los mas veloces avancen.",
+    "El encuentro ocurre en la <b>ampolla</b> de la trompa uterina.",
+    "Si no es fecundado, el ovocito es fagocitado: solo dura <b>24 horas</b>.",
+]))
+story.append(spacer(4))
+
+story.append(Paragraph("Singamia (union de gametos)", S_SUBSECTION))
+story.extend(bullets([
+    "El espermatozoide atraviesa primero las celulas de la <b>corona radiada</b>, gracias a su capacitacion.",
+    "Luego disuelve la <b>zona pelucida</b> al verter enzimas desde el <b>acrosoma</b>.",
+]))
+
+story.append(Paragraph("Reaccion de zona", S_SUBSECTION))
+story.extend(bullets([
+    "Al entrar un espermatozoide, se fusionan granulos bajo la membrana del ovocito II; sus enzimas fortalecen la "
+    "zona pelucida e impiden la entrada de otro espermatozoide.",
+    "El espermatozoide deja en la superficie la membrana que cubria el flagelo; el cilindro de microtubulos penetra "
+    "junto con el nucleo y las mitocondrias, pero solo el <b>nucleo</b> se usa (lo demas se degrada).",
+    "Antes de mezclarse los genes maternos y paternos, el ovocito II termina su meiosis II, formando otro cuerpo polar; "
+    "el ovulo se queda con la informacion genetica espermatica.",
+    "Se forman los <b>pronucleos</b> femenino y masculino, que replican su material genetico generando un "
+    "<b>cigoto 4n</b>.",
+]))
+story.append(spacer(8))
+
+
+# =================================================================
+# 5. EMBRIOGENESIS
+# =================================================================
+story.append(section_header("5. Embriogenesis"))
+story.append(spacer(6))
+
+story.extend(bullets([
+    "Periodo que va desde la fecundacion hasta la semana <b>8</b> de embarazo; en las primeras semanas ocurre la "
+    "formacion de organos (<b>organogenesis</b>).",
+]))
+secuencia = Table([[Paragraph(
+    "Cigoto &rarr; Morula &rarr; Blastula &rarr; Gastrula &rarr; Neurula &rarr; Faringula &rarr; Feto &rarr; Neonato",
+    ParagraphStyle("seq", fontName="Helvetica-Bold", fontSize=9.5, textColor=ROSA_FUERTE, alignment=TA_CENTER))]],
+    colWidths=[17.0*cm])
+secuencia.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,-1), ROSA_CLARO_BG),
+    ("BOX", (0,0), (-1,-1), 0.8, ROSA_SUAVE),
+    ("TOPPADDING", (0,0), (-1,-1), 6), ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+]))
+story.append(secuencia)
+story.append(spacer(6))
+
+story.append(Paragraph("Primeras divisiones", S_SUBSECTION))
+story.extend(bullets([
+    "En las primeras divisiones se obtienen celulas cada vez mas pequenas, ya que comparten el citoplasma del cigoto.",
+    "Entre <b>16 y 18 celulas</b> se le llama <b>morula</b>.",
+    "Las divisiones continuan mientras pasa por la trompa de Falopio; al entrar a la cavidad uterina se libera de la "
+    "zona pelucida, porque las celulas incorporan sodio generando un efecto osmotico que las agranda.",
+    "Se forma una cavidad dentro de la masa celular llamada <b>blastocele</b> &rarr; deja de ser morula y pasa a ser "
+    "<b>blastula</b>.",
+    "La blastula es la etapa en la que inicia la <b>implantacion</b> en el endometrio.",
+    "Mientras llegan a los vasos maternos, se nutre del glucogeno de las glandulas endometriales (estimuladas previamente "
+    "por la progesterona).",
+]))
+story.append(spacer(6))
+
+
+story.append(Paragraph("Capas germinativas", S_SUBSECTION))
+capasg = Table([
+    [Paragraph("Capa", S_TABLE_HEAD), Paragraph("Da origen a", S_TABLE_HEAD)],
+    [Paragraph("Endodermo", S_TABLE_CELL_L),
+     Paragraph("Aparato digestivo y glandulas anexas; celulas parenquimatosas de la mayoria de los organos.", S_TABLE_CELL_L)],
+    [Paragraph("Mesodermo", S_TABLE_CELL_L),
+     Paragraph("Tejidos conectivo, oseo y muscular; vasos sanguineos; estroma de todos los organos.", S_TABLE_CELL_L)],
+    [Paragraph("Ectodermo", S_TABLE_CELL_L),
+     Paragraph("Organos de los sentidos, sistema nervioso, piel y anexos: todo lo que nos comunica con el exterior y recibe estimulos.", S_TABLE_CELL_L)],
+], colWidths=[4.0*cm, 13.0*cm])
+capasg.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), ROSA_MEDIO),
+    ("BACKGROUND", (0,1), (-1,-1), ROSA_CLARO_BG),
+    ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#F8BBD0")),
+    ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+]))
+story.append(capasg)
+story.append(spacer(8))
+
+story.append(Paragraph("Gastrulacion", S_KEYTERM))
+story.extend(bullets([
+    "A mediados de la <b>3a semana</b> de desarrollo inicia la formacion del tubo digestivo: periodo llamado gastrulacion.",
+]))
+story.append(Paragraph("Neurulacion", S_KEYTERM))
+story.extend(bullets([
+    "Tras la aparicion de la <b>notocorda</b>, esta provoca un hundimiento por encima de ella.",
+    "Aparece el <b>surco neural</b> en el eje central del embrion; se forma un tubo y se separa de la piel.",
+    "Las celulas de la <b>cresta neural</b>, en el borde del tubo neural, migran a distintas partes del cuerpo formando: "
+    "ameloblastos, melanocitos y ganglios nerviosos de las raices posteriores de cada nervio somatico.",
+    "Tras esta etapa el embrion se transforma en la fase donde aparece el sistema nervioso central: la <b>neurula</b>.",
+]))
+story.append(Paragraph("Faringula", S_KEYTERM))
+story.extend(bullets([
+    "Se forman las estructuras de la cara; es la ultima etapa de la embriogenesis.",
+]))
+story.append(Paragraph("Periodo fetal", S_KEYTERM))
+story.extend(bullets([
+    "Terminada la embriogenesis, el producto se llama <b>feto</b>: ya esta totalmente formado y solo hay "
+    "<b>crecimiento</b> (no mas desarrollo de estructuras nuevas).",
+    "La cavidad uterina desaparece: el embrion crece y la decidua capsular se fusiona con la decidua parietal.",
+    "La cavidad corionica desaparece por el crecimiento del amnios.",
+]))
+
+story.append(PageBreak())
+
+
+# =================================================================
+# 6. IMPLANTACION Y ESTRUCTURAS EXTRAEMBRIONARIAS
+# =================================================================
+story.append(section_header("6. Implantacion y estructuras extraembrionarias"))
+story.append(spacer(6))
+
+story.append(Paragraph("Implantacion: regiones de la decidua", S_SUBSECTION))
+decid = Table([
+    [Paragraph("Decidua basal", S_TABLE_HEAD), Paragraph("Decidua capsular", S_TABLE_HEAD), Paragraph("Decidua parietal", S_TABLE_HEAD)],
+    [Paragraph("Endometrio que queda por debajo del embrion implantado.", S_TABLE_CELL_L),
+     Paragraph("Endometrio que queda por arriba del embrion.", S_TABLE_CELL_L),
+     Paragraph("Resto del endometrio que sigue revistiendo la cavidad uterina.", S_TABLE_CELL_L)],
+], colWidths=[5.7*cm, 5.7*cm, 5.6*cm])
+decid.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), ROSA_MEDIO),
+    ("BACKGROUND", (0,1), (-1,-1), ROSA_CLARO_BG),
+    ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#F8BBD0")),
+    ("TOPPADDING", (0,0), (-1,-1), 5), ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+]))
+story.append(decid)
+story.append(spacer(8))
+
+story.append(Paragraph("Saco vitelino", S_SUBSECTION))
+story.extend(bullets([
+    "Desaparece al crecer el saco amniotico.",
+]))
+sv = Table([
+    [Paragraph("Funcion", S_TABLE_HEAD), Paragraph("Detalle", S_TABLE_HEAD)],
+    [Paragraph("Transferencia inicial de nutrientes", S_TABLE_CELL_L),
+     Paragraph("Durante semanas 2-3, facilita el intercambio de nutrientes y gases entre madre y embrion mientras se establece la circulacion uteroplacentaria.", S_TABLE_CELL_L)],
+    [Paragraph("Hematopoyesis", S_TABLE_CELL_L),
+     Paragraph("Primer sitio de formacion de celulas sanguineas; la angiogenesis y hematopoyesis inician en el mesodermo extraembrionario que cubre el saco vitelino (islotes sanguineos), desde la 1a semana. Funciona hasta que el higado fetal asume la hematopoyesis hacia la 6a semana.", S_TABLE_CELL_L)],
+    [Paragraph("Origen de celulas germinales primordiales", S_TABLE_CELL_L),
+     Paragraph("En la 3a semana, los precursores de espermatozoides y ovocitos se reconocen en el endodermo de la pared del saco vitelino; migran luego a las crestas gonadales en desarrollo.", S_TABLE_CELL_L)],
+    [Paragraph("Formacion del intestino primitivo", S_TABLE_CELL_L),
+     Paragraph("En el plegamiento embrionario (4a semana), el techo del saco vitelino se incorpora al cuerpo del embrion, formando el intestino primitivo (origen del epitelio digestivo y respiratorio).", S_TABLE_CELL_L)],
+], colWidths=[4.3*cm, 12.7*cm])
+sv.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), ROSA_MEDIO),
+    ("BACKGROUND", (0,1), (-1,-1), ROSA_CLARO_BG),
+    ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#F8BBD0")),
+    ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+]))
+story.append(sv)
+story.append(spacer(8))
+
+
+story.append(Paragraph("Amnios y liquido amniotico", S_SUBSECTION))
+story.extend(bullets([
+    "Importante para el desarrollo muscular del embrion.",
+    "Se traga: ayuda en la formacion del tubo digestivo y urinario.",
+    "Se respira: ayuda en la formacion del aparato respiratorio.",
+    "Rango normal: <b>800 a 1000 ml</b> (alteraciones: <b>oligoamnios</b> y <b>polihidramnios</b>).",
+]))
+story.append(spacer(6))
+
+story.append(Paragraph("Alantoides", S_SUBSECTION))
+story.extend(bullets([
+    "Membrana extraembrionaria en forma de saco/diverticulo, originada en la pared ventral del intestino posterior "
+    "(endodermo), que se extiende hacia el tallo de conexion (mesodermo extraembrionario).",
+    "Aparece aproximadamente en el <b>dia 16</b> del desarrollo.",
+    "En el ser humano no funciona como reservorio de desechos (a diferencia de aves o reptiles); es rudimentario.",
+    "Desaparece al crecer el saco amniotico.",
+]))
+al = Table([
+    [Paragraph("Hematopoyesis", S_TABLE_CELL_L), Paragraph("Durante semanas 3 a 5, sus paredes producen sangre de forma temporal.", S_TABLE_CELL_L)],
+    [Paragraph("Desarrollo vascular", S_TABLE_CELL_L), Paragraph("Su funcion mas importante: forma los vasos umbilicales (1 vena y 2 arterias) que conectan al embrion con la placenta.", S_TABLE_CELL_L)],
+    [Paragraph("Desarrollo del tracto urogenital", S_TABLE_CELL_L), Paragraph("Su porcion intraembrionaria se continua con el seno urogenital, participando en el desarrollo de la vejiga urinaria.", S_TABLE_CELL_L)],
+], colWidths=[4.5*cm, 12.5*cm])
+al.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,-1), ROSA_CLARO_BG),
+    ("FONTNAME", (0,0), (0,-1), "Helvetica-Bold"),
+    ("TEXTCOLOR", (0,0), (0,-1), ROSA_FUERTE),
+    ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#F8BBD0")),
+    ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+]))
+story.append(al)
+
+story.append(PageBreak())
+
+
+# =================================================================
+# 7. PLACENTA
+# =================================================================
+story.append(section_header("7. Placenta"))
+story.append(spacer(6))
+story.extend(bullets([
+    "Organo formado por el feto y la madre. Mide ~<b>15 cm</b> y pesa ~<b>500 g</b>.",
+    "Tiene cavidades llamadas <b>cotiledones</b>, donde la sangre materna banya unas estructuras arboreas: las "
+    "<b>vellosidades</b> (de origen fetal), sitio del intercambio de nutrientes.",
+    "La sangre fetal <b>nunca</b> se mezcla con la materna.",
+    "El <b>cordon umbilical</b> esta formado por la gelatina de Wharton, que encierra <b>1 vena</b> y <b>2 arterias</b>.",
+    "La vena nace de la placenta y lleva nutrientes al feto; las arterias salen del feto hacia la placenta llevando "
+    "desechos (urea, dioxido de carbono).",
+]))
+story.append(spacer(6))
+
+story.append(Paragraph("Funciones de la placenta", S_SUBSECTION))
+pf = Table([
+    [Paragraph("hCG", S_TABLE_CELL_L), Paragraph("Sostiene al cuerpo luteo para que siga produciendo progesterona; luego la placenta produce su propia progesterona y suspende la hCG, dejando morir al cuerpo luteo.", S_TABLE_CELL_L)],
+    [Paragraph("Lactogeno placentario (somatomamotropina)", S_TABLE_CELL_L), Paragraph("Estimula el desarrollo final de las glandulas mamarias; aumenta la glucosa en sangre (efecto diabetogenico) y su captacion por la placenta.", S_TABLE_CELL_L)],
+    [Paragraph("Estrogenos", S_TABLE_CELL_L), Paragraph("Hacen crecer el utero y las mamas.", S_TABLE_CELL_L)],
+    [Paragraph("Barrera hematoplacentaria", S_TABLE_CELL_L), Paragraph("Evita que el sistema inmune materno rechace al feto; evita el paso de toxinas.", S_TABLE_CELL_L)],
+    [Paragraph("Captacion de IgG", S_TABLE_CELL_L), Paragraph("Transferencia de inmunidad pasiva al feto.", S_TABLE_CELL_L)],
+    [Paragraph("Intercambio", S_TABLE_CELL_L), Paragraph("De nutrientes y desechos entre madre y feto.", S_TABLE_CELL_L)],
+], colWidths=[5.2*cm, 11.8*cm])
+pf.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,-1), ROSA_CLARO_BG),
+    ("FONTNAME", (0,0), (0,-1), "Helvetica-Bold"),
+    ("TEXTCOLOR", (0,0), (0,-1), ROSA_FUERTE),
+    ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#F8BBD0")),
+    ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+]))
+story.append(pf)
+story.append(spacer(6))
+
+story.extend(bullets([
+    "Virus que atraviesan la placenta y pueden causar deformaciones fetales: sarampion, viruela, varicela, "
+    "coxsackie, poliovirus, citomegalovirus, toxoplasma, rubeola.",
+]))
+story.append(extra_box("Nemotecnia para infecciones congenitas", [
+    "Varios de estos agentes (toxoplasma, otros agentes, rubeola, citomegalovirus, herpes) se agrupan clasicamente "
+    "en el acronimo <b>TORCH</b>, util para recordar los principales microorganismos que cruzan la barrera "
+    "placentaria y afectan al feto."
+]))
+story.append(spacer(8))
+
+
+# =================================================================
+# 8. PARTO Y ALUMBRAMIENTO
+# =================================================================
+story.append(section_header("8. Parto y alumbramiento"))
+story.append(spacer(6))
+story.extend(bullets([
+    "En el ultimo mes de embarazo, el utero \"entrena\" mediante las <b>contracciones de Braxton Hicks</b>.",
+    "El tamano del feto presiona el cuello uterino; sumado a los cambios hormonales, desencadena el trabajo de parto.",
+    "Un embarazo normal dura en promedio <b>40 semanas</b>.",
+    "Secuencia: ruptura de la membrana amniotica &rarr; coronamiento (sale la cabeza) &rarr; alumbramiento.",
+    "<b>Periodo puerperal</b>: 42 dias posteriores al parto.",
+    "<b>Calostro</b>: primera leche producida tras el parto.",
+]))
+story.append(spacer(8))
+
+# =================================================================
+# 9. EMBARAZOS MULTIPLES
+# =================================================================
+story.append(section_header("9. Embarazos multiples"))
+story.append(spacer(6))
+
+gem = Table([
+    [Paragraph("Tipo", S_TABLE_HEAD), Paragraph("Origen", S_TABLE_HEAD), Paragraph("Variantes", S_TABLE_HEAD)],
+    [Paragraph("Gemelar / monocigotico", S_TABLE_CELL_L),
+     Paragraph("Mismo ovulo fecundado, que se fragmenta en alguna etapa del desarrollo.", S_TABLE_CELL_L),
+     Paragraph("Diamniotico-dicorionico \u00b7 Diamniotico-monocorionico \u00b7 Monoamniotico-monocorionico \u00b7 "
+               "Siameses (permanecen unidos)", S_TABLE_CELL_L)],
+    [Paragraph("Mellizo / dicigotico", S_TABLE_CELL_L),
+     Paragraph("Ovulos diferentes, cada uno fecundado por un espermatozoide distinto.", S_TABLE_CELL_L),
+     Paragraph("Diamniotico-dicorionico", S_TABLE_CELL_L)],
+], colWidths=[4.0*cm, 6.0*cm, 7.0*cm])
+gem.setStyle(TableStyle([
+    ("BACKGROUND", (0,0), (-1,0), ROSA_MEDIO),
+    ("BACKGROUND", (0,1), (-1,-1), ROSA_CLARO_BG),
+    ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#F8BBD0")),
+    ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ("VALIGN", (0,0), (-1,-1), "TOP"),
+]))
+story.append(gem)
+story.append(spacer(8))
+
+
+# =================================================================
+# 10. MOLA HIDATIFORME
+# =================================================================
+story.append(section_header("10. Mola hidatiforme"))
+story.append(spacer(6))
+story.append(extra_box("Tema sin desarrollar en el apunte original", [
+    "En tu apunte solo aparecia el titulo, sin contenido. Aqui va un resumen breve para que no quede el espacio vacio:",
+    "Es una <b>enfermedad trofoblastica gestacional</b>: crecimiento anormal del tejido trofoblastico (que normalmente "
+    "formaria la placenta), con degeneracion hidropica de las vellosidades coriales.",
+    "<b>Mola completa</b>: no hay tejido embrionario, generalmente por fecundacion de un ovulo sin material genetico "
+    "materno funcional por uno o dos espermatozoides (cariotipo 46,XX o 46,XY, todo de origen paterno).",
+    "<b>Mola parcial</b>: si hay tejido embrionario, usualmente por fecundacion de un ovulo normal por dos "
+    "espermatozoides (triploidia, 69 cromosomas).",
+    "Clinica clasica: sangrado vaginal, utero mayor al esperado para la edad gestacional, niveles muy elevados de "
+    "<b>hCG</b>; se confirma con ultrasonido (patron \"en racimo de uvas\" / \"tormenta de nieve\")."
+]))
+story.append(spacer(8))
+
+# =================================================================
+# 11. GLANDULA MAMARIA
+# =================================================================
+story.append(section_header("11. Glandula mamaria"))
+story.append(spacer(6))
+story.extend(bullets([
+    "Organo especializado en la produccion de leche; deriva de la modificacion de glandulas sudoriparas.",
+    "Crece a partir de una <b>linea mamaria</b>; en la especie humana se desarrolla una glandula por lado.",
+    "Se divide en <b>lobulillos glandulares</b>, formados por celulas <b>alveolares</b> productoras de leche, "
+    "estimuladas por <b>prolactina</b> y <b>lactogeno placentario</b>.",
+    "Cada lobulillo termina en un conducto llamado <b>lactoforo</b>.",
+    "<b>Ligamentos de Cooper</b>: sostienen la mama.",
+    "<b>Glandulas areolares de Montgomery</b>: lubrican la areola.",
+    "Al nacer, el producto se llama <b>neonato</b> (coloquialmente, \"bebe\").",
+]))
+
+
+# ---------------------------------------------------------------
+# BUILD
+# ---------------------------------------------------------------
+import os
+output_dir = os.path.dirname(os.path.abspath(__file__))
+output_path = os.path.join(output_dir, "Aparato_Reproductor_Femenino.pdf")
+
+doc = SimpleDocTemplate(
+    output_path,
+    pagesize=letter,
+    topMargin=1.6*cm, bottomMargin=1.3*cm,
+    leftMargin=1.5*cm, rightMargin=1.5*cm,
+    title="Aparato Reproductor Femenino - Apuntes"
+)
+doc.build(story, onFirstPage=header_footer, onLaterPages=header_footer)
+print(f"PDF generado correctamente en: {output_path}")
